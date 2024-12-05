@@ -21,15 +21,27 @@ os.environ['PINECONE_API_KEY'] = pinecone_api_key
 # Initialize Pinecone and get list of namespaces
 pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
 pinecone_index = pc.Index("codebase-rag")
-namespaces = pinecone_index.describe_index_stats()['namespaces'].keys()
+namespaces = list(pinecone_index.describe_index_stats()['namespaces'].keys())
+
+# Initialize the namespace in session state if it doesn't exist
+if "selected_namespace" not in st.session_state:
+    st.session_state.selected_namespace = namespaces[0] if namespaces else None
 
 # Add namespace selection to sidebar
 st.sidebar.title("Settings")
 selected_namespace = st.sidebar.selectbox(
     "Select Repository Namespace",
-    options=list(namespaces),
-    index=0
+    options=namespaces,
+    index=namespaces.index(st.session_state.selected_namespace) if st.session_state.selected_namespace in namespaces else 0,
+    key="namespace_selector"
 )
+
+# Update the session state when selection changes
+st.session_state.selected_namespace = selected_namespace
+
+# Update the caption to show the current namespace
+st.title("Codebase RAG")
+st.caption(f"Currently browsing: {st.session_state.selected_namespace}")
 
 def get_huggingface_embeddings(text, model_name="sentence-transformers/all-mpnet-base-v2"):
     model = SentenceTransformer(model_name)
@@ -39,12 +51,12 @@ def get_huggingface_embeddings(text, model_name="sentence-transformers/all-mpnet
 def perform_rag(query):
     raw_query_embedding = get_huggingface_embeddings(query)
 
-    # Update query to use selected namespace
+    # Use the namespace from session state
     top_matches = pinecone_index.query(
         vector=raw_query_embedding.tolist(), 
-        top_k=5, # Can change this to 10 or 20 to get more context  
+        top_k=5,
         include_metadata=True,
-        namespace=selected_namespace  # Use the selected namespace
+        namespace=st.session_state.selected_namespace  # Use the namespace from session state
     )
 
     # Get the list of retrieved texts
@@ -68,9 +80,6 @@ def perform_rag(query):
 
     return llm_response.choices[0].message.content
 
-
-st.title("Codebase RAG")
-st.caption(f"Currently browsing: {selected_namespace}")
 
 # Initialize chat history
 if "messages" not in st.session_state:
