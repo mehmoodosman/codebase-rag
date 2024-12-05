@@ -59,7 +59,7 @@ def perform_rag(query):
     """
 
     llm_response = client.chat.completions.create(
-        model="llama-3.1-70b-specdec",  # TODO: Change to llama-3.1-8b-instant          
+        model="mixtral-8x7b-32768",  # TODO: Change to llama-3.1-8b-instant, or llama-3.1-70b-versatile, mixtral-8x7b-32768       
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": augmented_query}
