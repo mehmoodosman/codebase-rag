@@ -42,7 +42,7 @@ def perform_rag(query):
     # Update query to use selected namespace
     top_matches = pinecone_index.query(
         vector=raw_query_embedding.tolist(), 
-        top_k=5, # Can change this to 10 or 20 to get more context  
+        top_k=10, # Can change this to 10 or 20 to get more context  
         include_metadata=True,
         namespace=selected_namespace  # Use the selected namespace
     )
