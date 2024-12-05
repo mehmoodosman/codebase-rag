@@ -42,7 +42,7 @@ def perform_rag(query):
     # Update query to use selected namespace
     top_matches = pinecone_index.query(
         vector=raw_query_embedding.tolist(), 
-        top_k=5, 
+        top_k=5, # Can change this to 10 or 20 to get more context  
         include_metadata=True,
         namespace=selected_namespace  # Use the selected namespace
     )
@@ -59,7 +59,7 @@ def perform_rag(query):
     """
 
     llm_response = client.chat.completions.create(
-        model="mixtral-8x7b-32768",  # TODO: Change to llama-3.1-8b-instant, or llama-3.1-70b-versatile, mixtral-8x7b-32768       
+        model="distil-whisper-large-v3-en",  # TODO: Change to llama-3.1-8b-instant, or llama-3.1-70b-versatile, mixtral-8x7b-32768       
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": augmented_query}
