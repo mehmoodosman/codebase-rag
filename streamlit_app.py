@@ -6,9 +6,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 from langchain.embeddings import OpenAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.schema import Document
-import ast
-from typing import List, Dict
-import re
 
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
@@ -39,37 +36,6 @@ selected_namespace = st.sidebar.selectbox(
 def get_huggingface_embeddings(text, model_name="sentence-transformers/all-mpnet-base-v2"):
     model = SentenceTransformer(model_name)
     return model.encode(text)
-
-
-def split_code_into_chunks(text: str, filepath: str) -> List[Dict]:
-    """Split code into semantic chunks using AST for Python files and fallback for others"""
-    chunks = []
-    
-    # Check if it's a Python file
-    if filepath.endswith('.py'):
-        try:
-            tree = ast.parse(text)
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
-                    chunk_text = ast.get_source_segment(text, node)
-                    if chunk_text:
-                        chunks.append({
-                            'text': chunk_text,
-                            'metadata': {
-                                'type': node.__class__.__name__,
-                                'name': node.name,
-                                'filepath': filepath,
-                                'line_number': node.lineno
-                            }
-                        })
-        except SyntaxError:
-            # Fallback to regular chunking if AST parsing fails
-            chunks.append({'text': text, 'metadata': {'filepath': filepath}})
-    else:
-        # For non-Python files, use simple chunking
-        chunks.append({'text': text, 'metadata': {'filepath': filepath}})
-    
-    return chunks
 
 
 def perform_rag(query):
