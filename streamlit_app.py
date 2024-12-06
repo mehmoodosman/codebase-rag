@@ -5,9 +5,10 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from langchain.embeddings import OpenAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
-import os
 from langchain.schema import Document
-
+import ast
+from typing import List, Dict
+import re
 
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
@@ -16,7 +17,6 @@ client = OpenAI(
 
 # Set the PINECONE_API_KEY as an environment variable
 pinecone_api_key = st.secrets["PINECONE_API_KEY"]
-os.environ['PINECONE_API_KEY'] = pinecone_api_key
 
 # Initialize Pinecone and get list of namespaces
 pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
@@ -41,30 +41,85 @@ def get_huggingface_embeddings(text, model_name="sentence-transformers/all-mpnet
     return model.encode(text)
 
 
+def split_code_into_chunks(text: str, filepath: str) -> List[Dict]:
+    """Split code into semantic chunks using AST for Python files and fallback for others"""
+    chunks = []
+    
+    # Check if it's a Python file
+    if filepath.endswith('.py'):
+        try:
+            tree = ast.parse(text)
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
+                    chunk_text = ast.get_source_segment(text, node)
+                    if chunk_text:
+                        chunks.append({
+                            'text': chunk_text,
+                            'metadata': {
+                                'type': node.__class__.__name__,
+                                'name': node.name,
+                                'filepath': filepath,
+                                'line_number': node.lineno
+                            }
+                        })
+        except SyntaxError:
+            # Fallback to regular chunking if AST parsing fails
+            chunks.append({'text': text, 'metadata': {'filepath': filepath}})
+    else:
+        # For non-Python files, use simple chunking
+        chunks.append({'text': text, 'metadata': {'filepath': filepath}})
+    
+    return chunks
+
+
 def perform_rag(query):
     raw_query_embedding = get_huggingface_embeddings(query)
 
-    # Update query to use selected namespace
+    # Update query to use selected namespace and include more metadata
     top_matches = pinecone_index.query(
         vector=raw_query_embedding.tolist(), 
-        top_k=5, # Can change this to 10 or 20 to get more context  
+        top_k=10,  # Reduced since we're getting more focused chunks
         include_metadata=True,
-        namespace=selected_namespace  # Use the selected namespace
+        namespace=selected_namespace
     )
 
-    # Get the list of retrieved texts
-    contexts = [item['metadata']['text'] for item in top_matches['matches']]
+    # Enhanced context building with metadata
+    contexts = []
+    for item in top_matches['matches']:
+        metadata = item['metadata']
+        context_header = f"File: {metadata.get('filepath', 'Unknown')}"
+        if 'type' in metadata:
+            context_header += f"\n{metadata['type']}: {metadata['name']} (Line {metadata['line_number']})"
+        
+        contexts.append(f"{context_header}\n```\n{metadata['text']}\n```")
 
-    augmented_query = "<CONTEXT>\n" + "\n\n-------\n\n".join(contexts[ : 10]) + "\n-------\n</CONTEXT>\n\n\n\nMY QUESTION:\n" + query
+    augmented_query = (
+        "<CODE_CONTEXT>\n" + 
+        "\n\n---\n\n".join(contexts) + 
+        "\n</CODE_CONTEXT>\n\n" +
+        "QUESTION:\n" + query
+    )
 
-    # Modify the prompt below as need to improve the response quality
-    system_prompt = f"""You are a Senior Software Engineer.
-
-    Answer any questions I have about the codebase, based on the code provided. Always consider all of the context provided when forming a response. Also take a step by step approach in your problem-solving.
+    system_prompt = """You are a Senior Software Engineer specializing in code analysis.
+    
+    Analyze the provided code context carefully, considering:
+    1. The structure and relationships between code components
+    2. The specific implementation details and patterns
+    3. The filepath and location of each code segment
+    4. The type of code segment (e.g., function, class, etc.)
+    5. The name of the code segment
+    
+    When answering questions:
+    - Reference specific parts of the code and their locations
+    - Explain the reasoning behind the implementation
+    - Suggest improvements if relevant to the question
+    - Consider the broader context of the codebase
+    - Always use the code context to answer the question
+    - Take a step by step approach in your problem-solving
     """
 
     llm_response = client.chat.completions.create(
-        model="llama-3.1-70b-versatile",  # TODO: Change to llama-3.1-8b-instant, or llama-3.1-70b-versatile       
+        model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": augmented_query}
