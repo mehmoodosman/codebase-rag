@@ -21,15 +21,20 @@ os.environ['PINECONE_API_KEY'] = pinecone_api_key
 # Initialize Pinecone and get list of namespaces
 pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
 pinecone_index = pc.Index("codebase-rag")
-namespaces = pinecone_index.describe_index_stats()['namespaces'].keys()
+# Convert namespaces to sorted list for consistent ordering
+namespace_list = sorted(list(pinecone_index.describe_index_stats()['namespaces'].keys()))
 
-# Add namespace selection to sidebar
-st.sidebar.title("Settings")
+# Initialize session state for namespace if it doesn't exist
+if "selected_namespace" not in st.session_state:
+    st.session_state.selected_namespace = namespace_list[0]
+
+# Update sidebar selection to use session state
 selected_namespace = st.sidebar.selectbox(
     "Select Repository Namespace",
-    options=list(namespaces),
-    index=0
+    options=namespace_list,  # Use the sorted list
+    key="selected_namespace"
 )
+
 
 def get_huggingface_embeddings(text, model_name="sentence-transformers/all-mpnet-base-v2"):
     model = SentenceTransformer(model_name)
