@@ -5,6 +5,8 @@ A Retrieval Augmented Generation (RAG) system for querying and understanding cod
 ## Overview
 
 This project implements a conversational interface for querying codebases using RAG technology. It combines vector similarity search through Pinecone with Large Language Models to provide contextually relevant answers about your code.
+![image](https://github.com/user-attachments/assets/021f60e1-c367-40c0-b44f-7ca8d39b73f7)
+
 
 ## Features
 
